@@ -1,0 +1,271 @@
+---
+title: "COVID19 Report"
+author: "Konica Patait"
+date: "2023-01-21"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)
+```
+
+# COVID19 Analysis
+This report is based on an covid data that is publicly available on [Johns Hopkins github site](https://github.com/CSSEGISandData/COVID-19).
+
+The agenda of this report is to analyze on below:
+
+- Shows the cases and deaths due to COVID19 in all the countries since 2019.
+- Show the number of cases and deaths due to COVID since 2019.
+- Compare the fatality ratio in US verses all the countries in the world.
+
+Case Fatality ratio is calculated as follows
+$$ ( \frac{Number~of~Cases~reported~in~which~patient~died}{Number~of~Cases~Reported} ) * 100 $$
+
+## Load Data
+
+Below set of lines load the COVID19 data available at Johns Hopkins github site. It is the data about the confirmed cases and deaths are available in separate csv file.
+
+```{r LoadData, include = TRUE}
+url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+file_names <- c("time_series_covid19_confirmed_US.csv",
+                "time_series_covid19_confirmed_global.csv",
+                "time_series_covid19_deaths_US.csv",
+                "time_series_covid19_deaths_global.csv",
+                "time_series_covid19_recovered_global.csv")
+urls <- paste(url_in,file_names,sep = "")
+urls
+
+if(file.exists("global_confirmed_loaded.Rdata")) {
+  print ('Loading Global Cases from cache')
+  global_confirmed_loaded <- get(load("global_confirmed_loaded.Rdata"))
+}else {
+  print ('Loading Global Cases from URL')
+  global_confirmed_loaded <- read_csv(urls[2])
+  save(global_confirmed_loaded,file = "global_confirmed_loaded.Rdata")
+}
+
+global_confirmed_loaded
+
+if(file.exists("global_death_loaded.Rdata")) {
+  print ('Loading Global Deaths from cache')
+  global_death_loaded <- get(load("global_death_loaded.Rdata"))
+} else {
+  global_death_loaded <- read_csv(urls[4])
+  save(global_death_loaded,file = "global_death_loaded.Rdata")
+}
+
+if(file.exists("global_recovered_loaded.Rdata")) {
+  global_recovered_loaded <- get(load("global_recovered_loaded.Rdata"))
+} else {
+  global_recovered_loaded <- read_csv(urls[5])
+  save(global_recovered_loaded,file = "global_recovered_loaded.Rdata")
+}
+
+if(file.exists("us_confirmed_loaded.Rdata")) {
+  print ('Loading US Confirmed from cache')
+  us_confirmed_loaded <- get(load("us_confirmed_loaded.Rdata"))
+} else {
+  us_confirmed_loaded <- read_csv(urls[1])
+  save(us_confirmed_loaded,file = "us_confirmed_loaded.Rdata")
+}
+
+if(file.exists("us_death_cache.Rdata")) {
+  print ('Loading US Deaths from cache')
+  us_death_loaded <-get(load("us_death_cache.Rdata"))
+} else {
+  us_death_loaded <- read_csv(urls[3])
+  save(us_death_loaded,file = "us_death_cache.Rdata")
+}
+
+```
+
+## Transforming Global data
+
+```{r GlobalDataTransform, echo=FALSE}
+
+global_confirmed <- global_confirmed_loaded %>% 
+  pivot_longer(
+    cols  =-c('Province/State','Country/Region','Lat','Long'),
+    names_to = "Date",
+    values_to = "Cases") %>% 
+  select(-c('Lat','Long'))
+
+global_death <- global_death_loaded %>% 
+  pivot_longer(
+    cols = -c('Province/State','Country/Region','Lat','Long'),
+    names_to = "Date",
+    values_to = "Deaths") %>% 
+  select(-c('Lat','Long'))
+
+global_recovered <- global_recovered_loaded %>% 
+  pivot_longer(cols = -c('Province/State','Country/Region','Lat','Long'),
+               names_to = "Date",
+               values_to = "Recovered") %>% 
+  select(-c('Lat','Long'))
+
+global_covid_data <- global_confirmed %>% 
+  full_join(global_death) %>% 
+  full_join(global_recovered) %>% 
+  rename (
+    Province_State = 'Province/State',
+    Country_Region = 'Country/Region') %>% 
+  mutate(Date = mdy(Date)) %>%
+  select(-c(Province_State))
+
+summary(global_covid_data )
+global_covid_data
+
+global_cases_by_month <- global_covid_data %>% 
+  group_by( YearMonth = lubridate::floor_date(Date, 'month')) %>%
+  drop_na() %>%
+  summarize(Cases = sum(Cases), 
+            Deaths = sum(Deaths),
+            Recovered = sum(Recovered)) 
+
+
+global_cases_by_month_w_fr <- global_cases_by_month %>% mutate(FatalityRatio = (Deaths/Cases * 100))
+global_cases_by_month_w_fr
+
+
+```
+## Transforming the US COVID19 data
+
+US COVID data is transformed as: 
+
+```{r DataTransform, echo=TRUE}
+
+us_confirmed <- us_confirmed_loaded %>% 
+  pivot_longer(cols = -c("UID": 'Combined_Key'),
+               names_to = "Date",
+               values_to = "Cases") %>% 
+  select('Admin2':'Cases') %>% 
+  mutate(Date = mdy(Date)) %>% 
+  select (-c('Lat', 'Long_')) %>% 
+  rename ( County = 'Admin2')
+
+us_death <- us_death_loaded %>% 
+  pivot_longer(cols = -c("UID": 'Combined_Key'),
+               names_to = "Date",
+               values_to = "Deaths") %>% 
+  select('Admin2':'Deaths') %>% 
+  mutate(Date = mdy(Date)) %>% 
+  select (-c('Lat', 'Long_')) %>% 
+  rename ( County = 'Admin2')
+
+us_cases <- us_confirmed %>% full_join(us_death) %>% filter(Cases > 0)
+us_cases
+
+
+#us_cases_by_month <- us_cases %>% 
+#  mutate(
+#    Month = month(Date),
+ #   Year = year(Date)
+#         ) %>%
+#  unite (YearMonth, c( 'Year', 'Month' ), sep = '-', na.rm = TRUE, remove= FALSE) %>%
+ # group_by(YearMonth, Country_Region, Date) %>%
+#  summarize(Cases = sum(Cases), 
+#            Deaths = sum(Deaths)) 
+
+us_cases_by_month <- us_cases %>% 
+  group_by(YearMonth = lubridate::floor_date(Date, 'month'), Country_Region) %>%
+  summarize(Cases = sum(Cases), 
+            Deaths = sum(Deaths)) 
+
+
+us_cases_by_month_w_fr <- us_cases_by_month %>% mutate(FatalityRatio = (Deaths/Cases * 100))
+us_cases_by_month_w_fr
+
+us_cases_by_state <- us_cases %>% 
+  group_by(County, Province_State, Country_Region, Date) %>% 
+  summarize(Total_Cases = sum(Cases), Total_Deaths = sum(Deaths)) %>% 
+  select('Province_State', 'Country_Region', 'Date', 'Total_Cases', 'Total_Deaths') %>% 
+  ungroup()
+
+tail(us_cases_by_state)
+
+us_total_cases <- us_cases_by_state %>% 
+  group_by(Country_Region, Date) %>% 
+  summarize( 
+    Total_Cases = sum(Total_Cases), 
+    Total_Deaths = sum(Total_Deaths)
+    ) %>% 
+  select(Country_Region, Date, Total_Cases, Total_Deaths) %>% 
+  ungroup()
+
+```
+
+## Visualization
+
+
+```{r DataVisualization, echo=TRUE}
+ ggplot(data = global_cases_by_month, aes(x=YearMonth,y=Cases)) + 
+  geom_line(aes(color='Cases')) + 
+  geom_point(aes(color='Cases')) + 
+  geom_point(aes(y= Deaths, color='Deaths')) +
+  geom_line(aes(y=Deaths, color = 'Deaths')) +
+  scale_y_log10() +
+  theme(legend.position = 'bottom', axis.text.x = element_text(angle=90)) +
+  labs(title = "COVID19 in World", y = 'Cases', x = 'Year')
+
+
+ggplot(data = us_cases_by_month, aes(x=YearMonth,y=Cases)) + 
+  geom_line(aes(color='Cases')) + 
+  geom_point(aes(color='Cases')) + 
+  geom_point(aes(y= Deaths, color='Deaths')) +
+  geom_line(aes(y=Deaths, color = 'Deaths')) +
+  scale_y_log10() +
+  theme(legend.position = 'bottom', axis.text.x = element_text(angle=90)) +
+  labs(title = "COVID19 in US",y = 'Cases',  x = 'Year')
+
+
+all_fatality_rate <- us_cases_by_month_w_fr %>% 
+  rename(FatalityRatioUS = FatalityRatio) %>%
+  right_join(global_cases_by_month_w_fr,by="YearMonth") %>%
+  rename(FatalityRatioAllCountries = FatalityRatio) %>%
+  select (c(YearMonth, FatalityRatioUS, FatalityRatioAllCountries))
+
+ggplot(data = all_fatality_rate, aes(x=YearMonth,y=FatalityRatioUS)) + 
+  geom_point(aes(color='US')) + 
+  geom_line(aes(color='US')) + 
+  geom_point(aes(y= FatalityRatioAllCountries, color='AllCountries')) +
+  geom_line(aes(y=FatalityRatioAllCountries, color = 'AllCountries')) +
+  theme(legend.position = 'bottom', axis.text.x = element_text(angle=90)) +
+  labs(title = "Fatality Rate", x='Year', y= 'Fatality Rate')
+
+
+```
+
+## Modelling
+
+The below model identifies the number of deaths based on the total number of cases reported. 
+
+**Please note that it doesn't consider external factors like availability of vaccination, immunity gained in people who already had COVID in the past, etc. The Model uses all the available data to train the data, and the same data is used to plot the values to check how well the model is trained on the current data. Ideally, a different dataset should have been used to test it well.**
+```{r Model, echo=TRUE}
+
+#us_total_cases_w_pred_shuffled <- us_total_cases[sample(1:nrow(us_total_cases)), ]
+
+#us_total_cases_w_pred_train_data <- us_total_cases_w_pred_shuffled[us_total_cases_w_pred_shuffled$Total_Cases > #quantile(us_total_cases_w_pred_shuffled$Total_Cases,prob=1-20/100),]
+
+#us_total_cases_w_pred_test_data <- us_total_cases_w_pred_shuffled[us_total_cases_w_pred_shuffled$Total_Cases > #quantile(us_total_cases_w_pred_shuffled$Total_Cases,prob=1-80/100),]
+
+#mod <- lm(Total_Deaths ~ Total_Cases, data = us_total_cases_w_pred_train_data)
+#summary(mod)
+
+#us_total_cases_w_pred <- us_total_cases_w_pred_test_data %>% mutate(PRED_DEATHS = predict(mod))
+#tail(us_total_cases_w_pred)
+
+mod <- lm(Total_Deaths ~ Total_Cases, data = us_total_cases)
+summary(mod)
+
+us_total_cases_w_pred <- us_total_cases %>% mutate(PRED_DEATHS = predict(mod))
+ 
+ggplot(data = us_total_cases_w_pred ) + 
+  geom_point(aes(x = Total_Cases, y = Total_Deaths ), color = "blue") +
+  geom_point(aes(x = Total_Cases, y = PRED_DEATHS ), color = "red") +
+  theme(legend.position = 'bottom', axis.text.x = element_text(angle=90)) +
+  labs(title = "COVID-19 Actual verses Predicted", x='Cases', y= 'Deaths')
+```
