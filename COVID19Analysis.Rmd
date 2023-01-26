@@ -14,7 +14,8 @@ library(lubridate)
 ```
 
 # COVID19 Analysis
-This report is based on an covid data that is publicly available on [Johns Hopkins github site](https://github.com/CSSEGISandData/COVID-19).
+This report is based on COVID-19 data that is publicly available on [Johns Hopkins GitHubsite](https://github.com/CSSEGISandData/COVID-19). 
+Link: https://github.com/CSSEGISandData/COVID-19
 
 The agenda of this report is to analyze on below:
 
@@ -27,7 +28,11 @@ $$ ( \frac{Number~of~Cases~reported~in~which~patient~died}{Number~of~Cases~Repor
 
 ## Load Data
 
-Below set of lines load the COVID19 data available at Johns Hopkins github site. It is the data about the confirmed cases and deaths are available in separate csv file.
+Below set of lines load the COVID19 data available at Johns Hopkins github site. It is the data about the confirmed cases and deaths are available in 5 separate csv file. 
+
+To laod the data, I am saving the data to my local store from the John Hopkins  gitHub repository. If the file is not available in local store then i reload the file from the GitHub repository.
+
+Each dataset contains the country/region, and the number of COVID-19 cases (or deaths or recoveries) reported daily.
 
 ```{r LoadData, include = TRUE}
 url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
@@ -83,9 +88,11 @@ if(file.exists("us_death_cache.Rdata")) {
 
 ```
 
-## Transforming Global data
+## Transforming Global COVID-19 data
 
-```{r GlobalDataTransform, echo=FALSE}
+The data containing the information about the COVID-19 cases from all the countries are available in different set such as confirmed COVID-19 cases per day per region and number of deaths due to COVID-19 per day per region.
+
+```{r GlobalDataTransform, include = TRUE, echo = TRUE}
 
 global_confirmed <- global_confirmed_loaded %>% 
   pivot_longer(
@@ -132,11 +139,11 @@ global_cases_by_month_w_fr
 
 
 ```
-## Transforming the US COVID19 data
+## Transforming the US COVID-19 data
 
-US COVID data is transformed as: 
+The dataset containing the infrmation about the COVID-19 cases in US are transformed to get the number of confirmed cases and number of deaths due to COVID-19 per month. The data is also used to find the fatality rate of COVID-19 in US.
 
-```{r DataTransform, echo=TRUE}
+```{r DataTransform, include = TRUE, echo=TRUE, warning = FALSE}
 
 us_confirmed <- us_confirmed_loaded %>% 
   pivot_longer(cols = -c("UID": 'Combined_Key'),
@@ -159,16 +166,6 @@ us_death <- us_death_loaded %>%
 us_cases <- us_confirmed %>% full_join(us_death) %>% filter(Cases > 0)
 us_cases
 
-
-#us_cases_by_month <- us_cases %>% 
-#  mutate(
-#    Month = month(Date),
- #   Year = year(Date)
-#         ) %>%
-#  unite (YearMonth, c( 'Year', 'Month' ), sep = '-', na.rm = TRUE, remove= FALSE) %>%
- # group_by(YearMonth, Country_Region, Date) %>%
-#  summarize(Cases = sum(Cases), 
-#            Deaths = sum(Deaths)) 
 
 us_cases_by_month <- us_cases %>% 
   group_by(YearMonth = lubridate::floor_date(Date, 'month'), Country_Region) %>%
@@ -200,17 +197,38 @@ us_total_cases <- us_cases_by_state %>%
 
 ## Visualization
 
+The below plot represents the COVID-19 trend for each year for the entire world. This visualization shows the number of COVID-19 cases and deaths due to COVID-19 happened yearly.
 
-```{r DataVisualization, echo=TRUE}
+
+```{r DataVisualizationWorld, include = TRUE, echo = TRUE}
  ggplot(data = global_cases_by_month, aes(x=YearMonth,y=Cases)) + 
   geom_line(aes(color='Cases')) + 
   geom_point(aes(color='Cases')) + 
   geom_point(aes(y= Deaths, color='Deaths')) +
   geom_line(aes(y=Deaths, color = 'Deaths')) +
   scale_y_log10() +
+  #scale_y_continuous(labels = scales::label_number_si()) +
+  #scale_y_continuous(labels = scales::scale_y_log10()) +
   theme(legend.position = 'bottom', axis.text.x = element_text(angle=90)) +
   labs(title = "COVID19 in World", y = 'Cases', x = 'Year')
 
+```
+
+
+The below plot represents the COVID-19 trend for each year for United States. This visualization shows the number of COVID-19 cases and deaths due to COVID-19 yearly.
+
+```{r DataVisualizationUS, include = TRUE, echo = TRUE}
+
+addUnits <- function(n) {
+  labels <- ifelse(n < 1000, n,  # less than thousands
+                   ifelse(n < 1e6, paste0(round(n/1e3), 'k'),  # in thousands
+                          ifelse(n < 1e9, paste0(round(n/1e6), 'M'),  # in millions
+                                 ifelse(n < 1e12, paste0(round(n/1e9), 'B'), # in billions
+                                        ifelse(n < 1e15, paste0(round(n/1e12), 'T'), # in trillions
+                                               'too big!'
+                                        )))))
+  return(labels)
+}
 
 ggplot(data = us_cases_by_month, aes(x=YearMonth,y=Cases)) + 
   geom_line(aes(color='Cases')) + 
@@ -218,10 +236,15 @@ ggplot(data = us_cases_by_month, aes(x=YearMonth,y=Cases)) +
   geom_point(aes(y= Deaths, color='Deaths')) +
   geom_line(aes(y=Deaths, color = 'Deaths')) +
   scale_y_log10() +
+  #scale_y_continuous(labels = addUnits)
   theme(legend.position = 'bottom', axis.text.x = element_text(angle=90)) +
   labs(title = "COVID19 in US",y = 'Cases',  x = 'Year')
 
+```
 
+The below plot represents the comparison of the fatality rate globally verse the United States yearly. The fatality is the number of deaths in the reported COVID cases per number of COVID-19 cases reported. 
+
+```{r DataVisualizationFatality, include = TRUE, echo = TRUE}
 all_fatality_rate <- us_cases_by_month_w_fr %>% 
   rename(FatalityRatioUS = FatalityRatio) %>%
   right_join(global_cases_by_month_w_fr,by="YearMonth") %>%
@@ -245,18 +268,6 @@ The below model identifies the number of deaths based on the total number of cas
 
 **Please note that it doesn't consider external factors like availability of vaccination, immunity gained in people who already had COVID in the past, etc. The Model uses all the available data to train the data, and the same data is used to plot the values to check how well the model is trained on the current data. Ideally, a different dataset should have been used to test it well.**
 ```{r Model, echo=TRUE}
-
-#us_total_cases_w_pred_shuffled <- us_total_cases[sample(1:nrow(us_total_cases)), ]
-
-#us_total_cases_w_pred_train_data <- us_total_cases_w_pred_shuffled[us_total_cases_w_pred_shuffled$Total_Cases > #quantile(us_total_cases_w_pred_shuffled$Total_Cases,prob=1-20/100),]
-
-#us_total_cases_w_pred_test_data <- us_total_cases_w_pred_shuffled[us_total_cases_w_pred_shuffled$Total_Cases > #quantile(us_total_cases_w_pred_shuffled$Total_Cases,prob=1-80/100),]
-
-#mod <- lm(Total_Deaths ~ Total_Cases, data = us_total_cases_w_pred_train_data)
-#summary(mod)
-
-#us_total_cases_w_pred <- us_total_cases_w_pred_test_data %>% mutate(PRED_DEATHS = predict(mod))
-#tail(us_total_cases_w_pred)
 
 mod <- lm(Total_Deaths ~ Total_Cases, data = us_total_cases)
 summary(mod)
