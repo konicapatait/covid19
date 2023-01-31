@@ -280,3 +280,11 @@ ggplot(data = us_total_cases_w_pred ) +
   theme(legend.position = 'bottom', axis.text.x = element_text(angle=90)) +
   labs(title = "COVID-19 Actual verses Predicted", x='Cases', y= 'Deaths')
 ```
+
+## Bias
+
+The data is available on John Hopkins Github and is provided by respective countries' administrations. The facilities in each country are different due to different factors such as population, people willing to get the COVID test, the socio-economic condition in that country, etc. 
+Countries that doesn't ave enough facilities might not be able to test the COVID as mush as other developed countries. This factor could lead to bias in the analysis. 
+
+## Summary
+The reported cases in the USA were high compared to other countries based on the population. But based on the analysis, the trend of COVID cases in the US compared to the world trend was very similar. Compared to the other factors, such as the fatality rate between the same parties, the trend again looked very similar. It might be possible that the US has more cases reported since the US is developedoped countries and has better facilities to test, track and monitor the COVID cases.
